@@ -22,6 +22,7 @@ local set_venv = function(venv)
     vim.fn.setenv('CONDA_PROMPT_MODIFIER', '(' .. venv.name .. ')')
   else
     vim.fn.setenv('VIRTUAL_ENV', venv.path)
+    update_path(venv.path)
   end
 
   current_venv = venv
@@ -102,7 +103,9 @@ local get_conda_base_path = function()
   if conda_exe == vim.NIL then
     return nil
   else
-    return Path:new(conda_exe):parent():parent() .. '/envs'
+    local envs_path = Path:new(conda_exe):parent():parent() .. '/envs'
+    local base_path = Path:new(conda_exe):parent():parent()
+    return { envs_path, base_path }
   end
 end
 
@@ -118,7 +121,20 @@ end
 M.get_venvs = function(venvs_path)
   local venvs = {}
   vim.list_extend(venvs, get_venvs_for(venvs_path, 'venv'))
-  vim.list_extend(venvs, get_venvs_for(get_conda_base_path(), 'conda'))
+  local conda_paths = get_conda_base_path()
+  if conda_paths then
+    local other_env_path = conda_paths[1]
+    local base_env_path = conda_paths[2]
+    base_env_path = tostring(Path:new(base_env_path))
+    local base_env_path_table = {
+      name = "base",
+      path = base_env_path,
+      source = "conda"
+    }
+    table.insert(venvs, base_env_path_table)
+    vim.list_extend(venvs, get_venvs_for(other_env_path, 'conda'))
+  end
+  -- vim.list_extend(venvs, get_venvs_for(get_conda_base_path(), 'conda'))
   vim.list_extend(venvs, get_venvs_for(get_pyenv_base_path(), 'pyenv'))
   vim.list_extend(venvs, get_venvs_for(get_pyenv_base_path(), 'pyenv', { only_dirs = false }))
   return venvs
