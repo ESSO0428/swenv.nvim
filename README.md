@@ -14,6 +14,10 @@ use 'AckslD/swenv.nvim'
 ```
 Requires `plenary`.
 
+## New Feature: Conda Base Environment Switch
+
+The latest update introduces the ability to seamlessly switch to the Conda base environment. This enhancement streamlines working with Conda environments by providing an intuitive and quick method to switch back to the base environment.
+
 ## Usage
 
 ### Pick Env
