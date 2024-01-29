@@ -10,7 +10,7 @@ restarting.
 For example using [`packer`](https://github.com/wbthomason/packer.nvim):
 
 ```lua
-use 'AckslD/swenv.nvim'
+use 'ESSO0428/swenv.nvim'
 ```
 Requires `plenary`.
 
