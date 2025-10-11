@@ -41,16 +41,19 @@ end
 ---@param second string|nil
 ---@return boolean
 local has_high_priority_in_path = function(first, second)
-  if first == nil or first == vim.NIL then
+  local first_index = first and string.find(ORIGINAL_PATH, first, 1, true)
+  if not first_index then
     return false
   end
 
-  if second == nil or second == vim.NIL then
+  local second_index = second and string.find(ORIGINAL_PATH, second, 1, true)
+  if not second_index then
     return true
   end
 
-  return string.find(ORIGINAL_PATH, first) < string.find(ORIGINAL_PATH, second)
+  return first_index < second_index
 end
+
 
 M.init = function()
   local venv
