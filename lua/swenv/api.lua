@@ -34,6 +34,20 @@ local set_venv = function(venv)
   end
 end
 
+local normalize_env = function(value)
+  if value == vim.NIL or value == '' then
+    return nil
+  end
+  return value
+end
+
+local safe_find = function(target)
+  if not target then
+    return nil
+  end
+  return string.find(ORIGINAL_PATH, target, 1, true)
+end
+
 ---
 ---Checks who appears first in PATH. Returns `true` if `first` appears first and `false` otherwise
 ---
@@ -41,17 +55,20 @@ end
 ---@param second string|nil
 ---@return boolean
 local has_high_priority_in_path = function(first, second)
-  local first_index = first and string.find(ORIGINAL_PATH, first, 1, true)
-  if not first_index then
+  first = normalize_env(first)
+  second = normalize_env(second)
+
+  local first_idx = safe_find(first)
+  if not first_idx then
     return false
   end
 
-  local second_index = second and string.find(ORIGINAL_PATH, second, 1, true)
-  if not second_index then
+  local second_idx = safe_find(second)
+  if not second_idx then
     return true
   end
 
-  return first_index < second_index
+  return first_idx < second_idx
 end
 
 
