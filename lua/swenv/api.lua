@@ -72,26 +72,53 @@ local update_path = function(path)
 end
 
 local set_venv = function(venv)
-  if venv.source == 'conda' then
-    vim.fn.setenv('CONDA_PREFIX', venv.path)
-    vim.fn.setenv('CONDA_DEFAULT_ENV', venv.name)
-    vim.fn.setenv('CONDA_PROMPT_MODIFIER', '(' .. venv.name .. ')')
-    -- clean venv env var
-    vim.fn.setenv('VIRTUAL_ENV', nil)
-    update_path(venv.path)
-  else
-    -- venv / local
-    vim.fn.setenv('VIRTUAL_ENV', venv.path)
-    -- clean conda env vars
-    vim.fn.setenv('CONDA_PREFIX', nil)
-    vim.fn.setenv('CONDA_DEFAULT_ENV', nil)
-    vim.fn.setenv('CONDA_PROMPT_MODIFIER', nil)
-    update_path(venv.path)
+  if not venv or not venv.path then
+    return
   end
 
-  current_venv = venv
+  local venv_path = tostring(venv.path)
+  local venv_name = venv.name or vim.fs.basename(venv_path)
+
+  if venv.source == 'conda' then
+    -- Switch to conda environment
+    vim.fn.setenv('CONDA_PREFIX', venv_path)
+    vim.fn.setenv('CONDA_DEFAULT_ENV', venv_name)
+    vim.fn.setenv('CONDA_PROMPT_MODIFIER', '(' .. venv_name .. ')')
+    vim.fn.setenv('CONDA_SHLVL', 1)
+
+    -- Clear venv but don't use nil to avoid unexpected behavior in some plugins/scripts
+    vim.fn.setenv('VIRTUAL_ENV', '')
+
+    update_path(venv_path)
+  else
+    -- Switch to venv / local / pyenv
+    vim.fn.setenv('VIRTUAL_ENV', venv_path)
+
+    -- Keep conda in stable state: return to base (if conda detected), otherwise set to empty string
+    local conda_exe = vim.fn.getenv('CONDA_EXE')
+    if conda_exe ~= vim.NIL and conda_exe ~= '' then
+      local base = tostring(Path:new(conda_exe):parent():parent())
+      vim.fn.setenv('CONDA_PREFIX', base)
+      vim.fn.setenv('CONDA_DEFAULT_ENV', 'base')
+    else
+      vim.fn.setenv('CONDA_PREFIX', '')
+      vim.fn.setenv('CONDA_DEFAULT_ENV', '')
+    end
+    vim.fn.setenv('CONDA_SHLVL', 0)
+    vim.fn.setenv('CONDA_PROMPT_MODIFIER', '')
+
+    update_path(venv_path)
+  end
+
+  current_venv = {
+    name = venv_name,
+    path = venv_path,
+    source = venv.source,
+  }
+
   if settings.post_set_venv then
-    settings.post_set_venv(venv)
+    -- Don't let post_set_venv errors interrupt the entire switching process
+    pcall(settings.post_set_venv, current_venv)
   end
 end
 
