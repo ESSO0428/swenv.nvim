@@ -271,8 +271,14 @@ M.auto_venv = function()
 
   local project_dir, _ = project_nvim.get_project_root()
   if project_dir then -- project_nvim.get_project_root might not always return a project path
+    -- First, use swenv's name matching
     local project_venv_name = read_venv_name(project_dir)
+    -- Not found swenv's name matching, prioritize using .<venv_dir>/pyvenv.cfg within the project (newly added)
     if not project_venv_name then
+      local locals = find_local_venvs(project_dir)
+      if #locals > 0 then
+        set_venv(locals[1])
+      end
       return
     end
     local closest_match = best_match(venvs, project_venv_name)
