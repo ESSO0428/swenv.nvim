@@ -11,6 +11,62 @@ local ORIGINAL_PATH = vim.fn.getenv('PATH')
 
 local current_venv = nil
 
+local function is_venv_dir(dir)
+  local p = Path:new(dir)
+  return
+      p:joinpath('pyvenv.cfg'):exists()
+end
+
+local function dedup_by_path(list)
+  local seen, out = {}, {}
+  for _, v in ipairs(list) do
+    if v.path and not seen[v.path] then
+      seen[v.path] = true
+      table.insert(out, v)
+    end
+  end
+  return out
+end
+
+---- load prompt of pyvenv.cfg
+local function read_pyvenv_prompt(dir)
+  local cfg = tostring(Path:new(dir):joinpath('pyvenv.cfg'))
+  local f = io.open(cfg, "r")
+  if not f then return nil end
+  for line in f:lines() do
+    local key, value = line:match("^%s*(%w+)%s*=%s*(.+)%s*$")
+    if key == "prompt" then
+      f:close()
+      return vim.trim(value)
+    end
+  end
+  f:close()
+  return nil
+end
+
+local function find_local_venvs(start_dir)
+  local venvs, seen = {}, {}
+  local function push(dir_path, display_name)
+    if seen[dir_path] then return end
+    if not is_venv_dir(dir_path) then return end
+
+    -- load  prompt of pyvenv.cfg or use .venv dir name
+    local name = read_pyvenv_prompt(dir_path)
+        or display_name
+        or vim.fs.basename(dir_path)
+
+    table.insert(venvs, { name = name, path = dir_path, source = 'local' })
+    seen[dir_path] = true
+  end
+
+  local cur = Path:new(start_dir or vim.loop.cwd())
+  for _, dir in ipairs(scan_dir(tostring(cur), { depth = 1, only_dirs = true, hidden = true, silent = true })) do
+    local venv_dir_name = vim.fs.basename(dir)
+    push(dir, venv_dir_name)
+  end
+  return venvs
+end
+
 local update_path = function(path)
   vim.fn.setenv('PATH', path .. '/bin' .. ':' .. ORIGINAL_PATH)
 end
@@ -20,15 +76,20 @@ local set_venv = function(venv)
     vim.fn.setenv('CONDA_PREFIX', venv.path)
     vim.fn.setenv('CONDA_DEFAULT_ENV', venv.name)
     vim.fn.setenv('CONDA_PROMPT_MODIFIER', '(' .. venv.name .. ')')
+    -- clean venv env var
+    vim.fn.setenv('VIRTUAL_ENV', nil)
+    update_path(venv.path)
   else
+    -- venv / local
     vim.fn.setenv('VIRTUAL_ENV', venv.path)
+    -- clean conda env vars
+    vim.fn.setenv('CONDA_PREFIX', nil)
+    vim.fn.setenv('CONDA_DEFAULT_ENV', nil)
+    vim.fn.setenv('CONDA_PROMPT_MODIFIER', nil)
     update_path(venv.path)
   end
 
   current_venv = venv
-  -- TODO: remove old path
-  update_path(venv.path)
-
   if settings.post_set_venv then
     settings.post_set_venv(venv)
   end
@@ -140,7 +201,22 @@ end
 
 M.get_venvs = function(venvs_path)
   local venvs = {}
+
+  -- 1) Search upward from project/path for .venv / venv (newly added)
+  local project_root = nil
+  local ok, project_mod = pcall(require, 'project_nvim.project')
+  if ok then
+    project_root = select(1, project_mod.get_project_root())
+  end
+  if project_root then
+    vim.list_extend(venvs, find_local_venvs(project_root))
+  end
+  -- Also add local venv from current working directory (in case project root was not detected)
+  vim.list_extend(venvs, find_local_venvs(vim.loop.cwd()))
+
+  -- 2) Existing sources
   vim.list_extend(venvs, get_venvs_for(venvs_path, 'venv'))
+
   local conda_paths = get_conda_base_path()
   if conda_paths then
     local other_env_path = conda_paths[1]
@@ -154,10 +230,12 @@ M.get_venvs = function(venvs_path)
     table.insert(venvs, base_env_path_table)
     vim.list_extend(venvs, get_venvs_for(other_env_path, 'conda'))
   end
-  -- vim.list_extend(venvs, get_venvs_for(get_conda_base_path(), 'conda'))
+
   vim.list_extend(venvs, get_venvs_for(get_pyenv_base_path(), 'pyenv'))
   vim.list_extend(venvs, get_venvs_for(get_pyenv_base_path(), 'pyenv', { only_dirs = false }))
-  return venvs
+
+  -- de duplicate by path
+  return dedup_by_path(venvs)
 end
 
 M.pick_venv = function()
